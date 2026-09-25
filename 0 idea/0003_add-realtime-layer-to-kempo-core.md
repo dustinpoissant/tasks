@@ -20,7 +20,7 @@ That was follow-up #2 in 0001: channels/topics, socket-to-user mapping via the s
 **Needs 0001 merged and released first.** WebSockets live on branch `0001_add-websockets-to-kempo-server` and join the still-unpublished kempo-server 3.4.0. Kempo core already peers on `kempo-server >= 3.4.0`, so once 3.4.0 ships with WebSockets that range is sufficient, but the work here cannot be installed by anyone until then.
 
 ## Findings so far (verified against the code on 2026-09-25)
-- **Blocker: kempo's API is served through a wildcard custom route, and upgrades ignore those.** `app-public/.config.json` maps `"/kempo/**": "../node_modules/kempo/dist/kempo/**"`, which is how everything under `src/kempo/api/**` reaches consumers. 0001 decided (and documented) that custom and wildcard routes do **not** apply to WebSocket upgrades: only a `WS.js` in the served tree is resolved. So a `WS.js` placed at `src/kempo/api/**/WS.js` would 404 on the handshake in every consumer. Either kempo-server gains custom/wildcard route support for `WS.js` (a change to the transport task's scope decision), or kempo core has to route upgrades some other way. This has to be settled before anything else.
+- **Resolved in 0001 (2026-09-25): kempo's API is served through a wildcard custom route, which upgrades used to ignore.** `app-public/.config.json` maps `"/kempo/**": "../node_modules/kempo/dist/kempo/**"`, which is how everything under `src/kempo/api/**` reaches consumers. 0001 decided (and documented) that custom and wildcard routes do **not** apply to WebSocket upgrades: only a `WS.js` in the served tree is resolved. So a `WS.js` placed at `src/kempo/api/**/WS.js` would have 404'd on the handshake in every consumer. Fixed on the 0001 branch: upgrades now resolve exact custom route, then wildcard, then the served tree, and a `..` segment is refused. Verified against the built `dist` with a wildcard mapping shaped like kempo's. **Still to confirm in a real kempo install:** that kempo's build actually emits `WS.js` into `dist/kempo/api/**` (its build copies and minifies `src/kempo/api`; not checked).
 - **Kempo middleware runs on the handshake.** Consumers list `../node_modules/kempo/middleware/kempo.js` under `middleware.custom`, and 0001 runs custom middleware for upgrades, against an `http.ServerResponse` bound to the socket. That middleware does auth and admin routing and was written for ordinary HTTP. Whether it behaves correctly on an upgrade is **unverified**.
 - **`routeFiles` is not deep-merged.** kempo-server merges config shallowly for that key, so a consumer whose `.config.json` sets its own `routeFiles` silently loses `WS.js`. The stock `app-public/.config.json` does not set it, so this only affects consumers who did.
 - **Session lookup already fits.** `server/utils/auth/getSession.js` takes a token, not a request, which is what the four-layer rule requires. The `WS.js` HTTP-layer file reads `request.cookies.session_token` and passes it in. The origin check from 0001 already guards the cookie-riding-along hazard.
@@ -28,7 +28,7 @@ That was follow-up #2 in 0001: channels/topics, socket-to-user mapping via the s
 - **Layering rules that apply** (from AGENTS.md): anything in `server/utils/` must be HTTP-agnostic and return `[error, data]` tuples, so channel/subscription logic lives there, and the `WS.js` file is thin HTTP-layer glue.
 
 ## Acceptance Criteria
-- [ ] {Resolve the custom-route blocker above and record the decision, including whether it means a change to kempo-server}
+- [x] {Custom-route blocker resolved in 0001, see Findings}
 - [ ] {A `WS.js` under kempo's API accepts an upgrade in a stock consumer install, authenticated by the existing session cookie, and refuses with 401 when there is none}
 - [ ] {A socket is mapped to its user, so a push can target "this user" rather than a raw socket}
 - [ ] {Channels/topics: a client can subscribe and unsubscribe, and server code can publish to a channel}
@@ -39,7 +39,7 @@ That was follow-up #2 in 0001: channels/topics, socket-to-user mapping via the s
 
 ## Repos Involved
 - **kempo** (core) - the realtime layer: API route(s), `server/utils/` logic, `server/sdk.js` exports, docs.
-- **kempo-server** - possibly, if the custom-route blocker is resolved by teaching upgrades to honour custom/wildcard routes. Otherwise untouched.
+- **kempo-server** - already changed in 0001 (custom/wildcard routes for upgrades); not expected to change again for this task.
 
 ## Notes
 **Open question: what "database connection infrastructure" should mean.** The request was to add "the API layers and database connection infrastructure", and that phrase is ambiguous. Candidates, none of them decided:
