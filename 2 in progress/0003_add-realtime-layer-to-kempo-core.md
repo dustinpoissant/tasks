@@ -1,13 +1,14 @@
 ---
 title: add-realtime-layer-to-kempo-core
 description: Build the realtime layer in kempo (CMS core) on kempo-server's WebSocket transport - authenticated sockets, channels, a Postgres LISTEN/NOTIFY bus across processes, persisted messages with replay, a browser client, and an admin connection view - so kempo (CMS) extensions can push to clients
-repos: kempo
+repos: kempo, kempo-server
 status: in progress
 created: 2026-09-25
 owner: Dustin
 qa: Dustin
 branches:
   kempo: 0003_add-realtime-layer-to-kempo-core
+  kempo-server: 0003_add-realtime-layer-to-kempo-core
 prs: {}
 ---
 
@@ -40,7 +41,7 @@ The first intended consumer is kempo-payments live status (its admin list and de
 - **Channel names are `<extension-name>:<channel>`, with the prefix enforced** at registration, so two extensions cannot collide. Core's own channels use `kempo:`. Each user also has an implicit `user:<id>` channel for "send to this person".
 - **Default deny.** A channel must be registered with an `authorize` check before anyone can subscribe. The check runs on subscribe, against the existing permissions system.
 - **Persistence is opt-in per channel** (`persist: true`), not for every publish, so ephemeral traffic does not write a row. Retention is per channel, default 24 hours.
-- **Clients only subscribe.** They cannot publish to arbitrary channels, and there are no client-to-server message handlers for extensions in v1 (see out of scope).
+- **Clients may not publish to arbitrary channels.** *(Amended 2026-09-25: a client can now send a message to a channel it is subscribed to, but only a handler the channel's owner declared receives it. See the extension surface below.)*
 - **Owner and QA are Dustin**, matching task 0001.
 
 ## Architecture
@@ -94,16 +95,35 @@ Follows the four-layer rule in AGENTS.md: `server/utils/` is HTTP-agnostic and r
 - [x] `npm run build` emits `dist/kempo/api/realtime/WS.js` and `dist/kempo/realtime.js`, and the full suite passes.
 - [ ] Released through kempo's normal release process.
 
+## Extension surface (scope added 2026-09-25)
+The owner clarified that the point of this task is to make kempo's WebSocket capability a **generic primitive that future extensions build on**, the way `createPage` or `createUser` are: exposed through hooks and server SDK functions, with nothing game-, blog- or chat-specific in core. A game's shared world, a blog's live comments and a chat room should all be the same primitive at different rates. The first pass built channels, publish, replay and a browser client but left the extension points out; that was too narrow. This section adds them.
+
+A shared real-time game world was raised as a stress test, not a plan: sub-second updates, 10 to 20 players per world, roughly 20 updates a second each. It is the capacity target to size against. The extension that would host it is future work and out of scope.
+
+**Design constraints (why the surface is shaped this way)**
+- Kempo's hook system reads the database on **every** trigger and awaits handlers in order. That is right for rare lifecycle events and wrong for per-message traffic, so lifecycle uses hooks and incoming messages use a handler resolved once into memory.
+- Postgres `NOTIFY` fan-out serializes commits and cannot carry high-rate traffic. A channel that needs speed gets a process-local scope that never touches the database.
+
+**Acceptance criteria**
+- [ ] **Lifecycle hooks** fire through the existing hook system without delaying the socket: `realtime:connected`, `realtime:disconnected`, `realtime:subscribed`, `realtime:unsubscribed`. A `realtime:before_subscribe` guard hook lets an extension refuse a subscription with custom logic, following the `middleware:before_page` precedent.
+- [ ] **Client-to-server messages.** A client can send a message to a channel it is subscribed to. A channel declares an `onMessage` handler (in `kempo-config.json`, or as a function when registered in code), resolved once and cached in memory. A client that is not subscribed to the channel is refused. A handler that throws sends an error to that client only.
+- [ ] **Acknowledgements.** A message sent with a `ref` gets an `ack` carrying the handler's return value, or an error, so a client can await a reply.
+- [ ] **Fast channels.** A channel declared `scope: "process"` delivers in memory to this process's subscribers and never touches Postgres. It cannot persist. The default scope stays cross-process.
+- [ ] **SDK functions** for acting on connections: send to one connection, close a connection, list a channel's subscribers, alongside the existing `publish`, `registerChannel` and `listConnections`. Anything process-local says so in its name or docs.
+- [ ] **Browser client** gains `send(channel, data)` returning a promise for the ack, and a way to receive direct messages.
+- [ ] **Per-connection limits in core:** message rate (default generous, configurable) and connections per user, with clear errors and a close code the client understands.
+- [ ] **kempo-server transport hardening:** expose how much is queued on a socket; a send option that drops when the connection is backed up (for latest-wins data); a hard ceiling that disconnects a stuck client so memory cannot grow without bound; and configurable caps on total connections and connections per IP. Core degrades cleanly on kempo-server 3.4.0, which lacks these.
+- [ ] **Capacity is measured**, not estimated: a test with 20 clients in one channel each sending at 20 per second on one process records fan-out latency, and the number goes in the docs.
+- [ ] Tests, spec and docs updated for all of the above, and verified in a real browser.
+
 ## Repos Involved
 - **kempo** (core), all of the work.
-- kempo-server is **not expected to change**. If something turns out to need it, that is its own task, not scope creep here.
+- **kempo-server**: the transport hardening above (queued-bytes visibility, drop-when-backed-up, a stuck-client ceiling, connection caps). Released separately as a minor.
 
 ## Out of scope for v1
 - **kempo-payments live status.** The first consumer, its own task (0001 follow-up #3).
-- **Client-to-server message handlers for extensions.** No consumer needs them yet; clients only subscribe.
 - **Presence / "who is online".** Needs shared cross-process state; not requested.
 - **Cross-process admin view.** The admin page shows only its own process. Aggregating across processes would need a request/response over the bus.
-- **Outbound backpressure in kempo-server.** A slow client still queues frames in memory (known limitation from 0001). Fine for low-rate status pushes; worth its own task before any high-rate use.
 - **Redis or any other broker.**
 
 ## Notes
