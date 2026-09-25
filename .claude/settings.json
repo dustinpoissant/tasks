@@ -1,0 +1,8 @@
+{
+  "skillOverrides": {
+    "task-create": "on",
+    "task-refine": "on",
+    "task-do": "on",
+    "task-validate": "on"
+  }
+}

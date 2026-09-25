@@ -1,0 +1,5 @@
+This file marks the root of the collaborative tasks repository.
+If you're running skills from other repos, they will look for this file to locate the tasks directory.
+
+Set environment variable: TASKS_REPO_PATH=C:\Users\dusti\dev\tasks
+Or scripts will search parent directories for this marker file.
