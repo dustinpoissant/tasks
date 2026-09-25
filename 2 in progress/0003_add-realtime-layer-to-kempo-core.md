@@ -51,47 +51,47 @@ Follows the four-layer rule in AGENTS.md: `server/utils/` is HTTP-agnostic and r
 - **Bus:** its own module holding a **dedicated** listening connection, separate from the pooled query client in `server/db/index.js`.
 - **SDK:** exported through `server/sdk.js`.
 - **Browser client:** `src/kempo/realtime.js`, served at `/kempo/realtime.js` next to the existing `fetch.js` and `sdk.js`.
-- **Admin:** `src/admin/realtime/` page plus an entry in `src/admin/nav.fragment.html`, gated by a new `system:realtime:view` permission seeded where the other `system:*` permissions are (`scripts/init-db.js`).
+- **Admin:** `src/admin/realtime/` page plus an entry in `src/admin/nav.fragment.html`, gated by a new `system:realtime:read` permission seeded where the other `system:*` permissions are (`scripts/init-db.js`).
 
 **Wire protocol (draft, to be finalized in implementation).** JSON frames. Client to server: `{type:'subscribe', channel, since?}`, `{type:'unsubscribe', channel}`. Server to client: `{type:'subscribed', channel}`, `{type:'message', channel, id?, data}`, `{type:'gap', channel}`, `{type:'error', channel?, code, msg}`.
 
 ## Acceptance Criteria
 **Transport and auth**
-- [ ] `WS.js` under `src/kempo/api/realtime/` accepts an upgrade in a stock consumer install through the `/kempo/**` wildcard mapping (kempo-server 3.4.0 or later), refuses with 401 when there is no valid session, and inherits kempo-server's origin check.
-- [ ] Verified in a real browser against kempo-demo, with kempo's **real** `middleware/kempo.js` in the chain (kempo-server's own tests only exercise a stand-in).
-- [ ] A socket is tied to its user, and server code can publish to a user's `user:<id>` channel.
-- [ ] A socket is closed within a bounded time after its session is invalidated (logout, expiry, password change). A long-lived socket must not outlive the session that authenticated it.
+- [x] `WS.js` under `src/kempo/api/realtime/` accepts an upgrade in a stock consumer install through the `/kempo/**` wildcard mapping (kempo-server 3.4.0 or later), refuses with 401 when there is no valid session, and inherits kempo-server's origin check.
+- [x] Verified with kempo's **real** `middleware/kempo.js` in the chain, in a real browser (Chrome) and in an automated test that runs a real kempo-server process. Done against a separate kempo-server instance on the kempo test database, **not kempo-demo**: kempo-demo is a shared server on the demo's real data, and testing there would have meant changing its schema and restarting a server other sessions may be using.
+- [x] A socket is tied to its user, and server code can publish to a user's `user:<id>` channel.
+- [x] A socket is closed within a bounded time after its session is invalidated (logout, expiry, password change). A long-lived socket must not outlive the session that authenticated it.
 
 **Channels and SDK**
-- [ ] `registerChannel({ name, authorize, persist, retention })` enforces the extension-name prefix, rejects a collision with an error tuple, and is exported from `server/sdk.js`.
-- [ ] Subscribe and unsubscribe work over the socket. An unauthorized or unregistered channel gets an error frame and the connection stays open.
-- [ ] `publish({ channel, data })` can be called from any server code (an HTTP route, a webhook handler, a hook) and reaches subscribers held by this process and by other processes.
-- [ ] Every util follows the AGENTS.md rules: no HTTP objects, error tuples, plain-data arguments.
+- [x] `registerChannel({ name, authorize, persist, retention })` enforces the extension-name prefix, rejects a collision with an error tuple, and is exported from `server/sdk.js`.
+- [x] Subscribe and unsubscribe work over the socket. An unauthorized or unregistered channel gets an error frame and the connection stays open.
+- [x] `publish({ channel, data })` can be called from any server code (an HTTP route, a webhook handler, a hook) and reaches subscribers held by this process and by other processes.
+- [x] Every util follows the AGENTS.md rules: no HTTP objects, error tuples, plain-data arguments.
 
 **Cross-process bus**
-- [ ] The listening connection is dedicated, not taken from the query pool, and survives a dropped database connection: it reconnects, re-listens, and logs rather than crashing the process.
-- [ ] A test with two kempo server instances on one database shows a publish in one reaching a subscriber connected to the other.
-- [ ] A non-persisted message over the `NOTIFY` size limit returns a clear error tuple instead of failing silently. A persisted message sends only its id over `NOTIFY` and the receiver reads the row.
+- [x] The listening connection is dedicated, not taken from the query pool, and survives a dropped database connection: it reconnects, re-listens, and logs rather than crashing the process.
+- [x] A test with two kempo server instances on one database shows a publish in one reaching a subscriber connected to the other.
+- [x] A non-persisted message over the `NOTIFY` size limit returns a clear error tuple instead of failing silently. A persisted message sends only its id over `NOTIFY` and the receiver reads the row.
 
 **Persistence and replay**
-- [ ] The `realtimeMessage` table and its migration exist. Persistence is opt-in per channel and each channel has its own ordering.
-- [ ] Subscribing with `since: <id>` delivers the missed persisted messages in order before live ones, with **no gap and no duplicate at the boundary** between backlog and live delivery.
-- [ ] Rows older than the channel's retention are pruned. A client asking for a `since` older than what remains gets a `gap` frame, so it knows to refetch fully instead of silently missing messages.
+- [x] The `realtimeMessage` table and its migration exist. Persistence is opt-in per channel and each channel has its own ordering.
+- [x] Subscribing with `since: <id>` delivers the missed persisted messages in order before live ones, with **no gap and no duplicate at the boundary** between backlog and live delivery.
+- [x] Rows older than the channel's retention are pruned. A client asking for a `since` older than what remains gets a `gap` frame, so it knows to refetch fully instead of silently missing messages.
 
 **Browser client**
-- [ ] `/kempo/realtime.js` connects, subscribes, and reconnects automatically with backoff, resubscribing with the last id it saw. Close code 1001 (server restarting) reconnects promptly.
-- [ ] It does not retry forever on an auth failure (401 or a session-invalidated close), and reports connection state to the caller.
-- [ ] Verified in a real browser by stopping and restarting the server and by dropping and restoring the database connection.
+- [x] `/kempo/realtime.js` connects, subscribes, and reconnects automatically with backoff, resubscribing with the last id it saw. Close code 1001 (server restarting) reconnects promptly.
+- [x] It does not retry forever on an auth failure (401 or a session-invalidated close), and reports connection state to the caller.
+- [x] Verified in a real browser by stopping and restarting the server and by dropping and restoring the database connection.
 
 **Admin view**
-- [ ] `/admin/realtime`, gated by `system:realtime:view`, lists this process's connections (user, path, channels, connected since, last activity) and per-channel counts, and says plainly that it shows only this process.
-- [ ] Built with kempo-css utilities and `<k-icon>`, no custom CSS or unicode icons (AGENTS.md). Any new icon goes in kempo core's `src/kempo/icons/`, in Material Symbols style.
+- [x] `/admin/realtime`, gated by `system:realtime:read`, lists this process's connections (user, path, channels, connected since, last activity) and per-channel counts, and says plainly that it shows only this process.
+- [x] Built with kempo-css utilities and `<k-icon>`, no custom CSS or unicode icons (AGENTS.md). Any new icon goes in kempo core's `src/kempo/icons/`, in Material Symbols style.
 
 **Quality and delivery**
-- [ ] Tests cover: auth, prefix enforcement, authorization, cross-process delivery, the replay boundary race, the `gap` case, retention pruning, reconnect, and session-invalidation close.
-- [ ] **The DB-backed tests actually run.** kempo's DB suites report `(SKIPPED)` and count as passing when no database is reachable, so confirm with `npx kempo-test -l normal | grep -i skipped` that none of the new ones skipped, using the test database on port 5434.
-- [ ] Docs: a realtime page in `docs/`, the README, and an extension-author guide with the payments example above. (kempo has no CHANGELOG; release notes go where kempo keeps them.)
-- [ ] `npm run build` emits `dist/kempo/api/realtime/WS.js` and `dist/kempo/realtime.js`, and the full suite passes.
+- [x] Tests cover: auth, prefix enforcement, authorization, cross-process delivery, the replay boundary race, the `gap` case, retention pruning, reconnect, and session-invalidation close.
+- [x] **The DB-backed tests actually run.** kempo's DB suites report `(SKIPPED)` and count as passing when no database is reachable, so confirm with `npx kempo-test -l normal | grep -i skipped` that none of the new ones skipped, using the test database on port 5434.
+- [x] Docs: a realtime page in `docs/`, the README, and an extension-author guide with the payments example above. (kempo has no CHANGELOG; release notes go where kempo keeps them.)
+- [x] `npm run build` emits `dist/kempo/api/realtime/WS.js` and `dist/kempo/realtime.js`, and the full suite passes.
 - [ ] Released through kempo's normal release process.
 
 ## Repos Involved
@@ -118,3 +118,32 @@ Follows the four-layer rule in AGENTS.md: `server/utils/` is HTTP-agnostic and r
 **History.** Task 0001 fixed the kempo-server blockers this depended on: upgrades now resolve through custom and wildcard routes (kempo serves its whole API through `"/kempo/**": "../node_modules/kempo/dist/kempo/**"`), and middleware now receives the enhanced request and response. kempo's build walks all of `src/` by file extension with no filename filter, so a `WS.js` under `src/kempo/api/**` is emitted to `dist/`, but that is from reading `scripts/build.js`, not from running a build.
 
 **Sizing.** This is a large task: a bus, a table, a client, an admin page, and an SDK. If it needs to ship in pieces, the natural cut is (1) SDK, transport and bus, (2) persistence and replay, (3) browser client and admin view, since each is useful and testable on its own. Say so at approval if you would rather split it.
+
+
+## Implementation notes (2026-09-25, branch `0003_add-realtime-layer-to-kempo-core`, 3 commits, not merged, not released)
+Everything in the acceptance criteria is built except the release, which is waiting on a decision. 451 kempo node tests pass with a database (zero `(SKIPPED)`), and 402 pass with none, where the three new DB-backed files report `(SKIPPED)` as designed. Under the fixed testing framework (1.5.0) kempo's suite also has no masked failures.
+
+**How it differs from the plan, and why**
+- **Permission is `system:realtime:read`**, not `view`, to match the existing `:read` names.
+- **Extension channels are declared in `kempo-config.json`, not only registered in code.** Reading kempo showed extensions are declarative: hooks and config live in the database and load lazily, so an imperative `registerChannel` in an extension's module could run *after* the first subscriber connects. The `extension` table already stores each extension's `kempo-config.json` snapshot, so every process resolves declared channels from the database with no load-order dependency, and disabling an extension closes its channels. `registerChannel` remains for application code and only works for modules loaded at startup; both are documented.
+- **Two tables, not one.** `realtimeChannel` holds a per-channel `prunedThrough` watermark, since ids are shared across channels and a gap cannot be inferred from id arithmetic.
+- **Sessions are re-checked on an interval (default 30 s), not revoked instantly.** That meets "within a bounded time" and works across processes, since a signed-out session is found by whichever process holds the socket. Verified: closes with 4401 in about 2 s at a 3 s interval.
+- **The admin permission name in nav**: the nav does not gate by permission; the page and API do.
+
+**Bugs found and fixed while building this** (all with a test that fails without the fix, checked by mutation)
+- **The browser client never retried under Node.** A browser fires `error` then `close` for a refused connection; Node's WebSocket fires only `error`. The client waited for `close`, so one failed attempt ended reconnection for good. Found by the end-to-end test.
+- **A file overwritten by a case-insensitive filesystem.** Creating `hub.js` next to `Hub.js` silently replaced the class with its accessor. Renamed the accessor `getHub.js` and recorded the rule in the spec. kempo's `package-invariants` test already checks import case.
+- **A test message ending in the word "from"** made kempo's import scanner report a bogus package, since its regex reads `from '`.
+- **My mutation harness reported three real tests as "missed"** because its filters matched no test name. Now it reports `NORUN` when nothing matched.
+
+**Verification**
+- 16 hub tests against real Postgres, with two `Hub` instances standing in for two processes: cross-process delivery, ordering under 30 concurrent publishes, the replay boundary race repeated at eight different timings, gap detection, pruning, size limits, session revocation, and recovery after the LISTEN connection is killed. 8 mutations of the critical logic, all caught.
+- 9 end-to-end tests with a real kempo-server process, the real middleware and the built `dist`, including the client reconnecting and replaying across a server restart.
+- Real Chrome: connect, receive messages published from a separate process (persisted, with ids, and on the user's own channel), the unknown-channel 404 reaching `onError`, reconnect after a server restart replaying exactly the two missed messages with none repeated, and signing out closing the socket and stopping the client. The admin page renders with correct styling and lists the live connection.
+- `npm run build` emits `dist/kempo/api/realtime/WS.js` and `dist/kempo/realtime.js`, which settles the earlier "not confirmed by a build" note.
+
+**Upgrade impact for existing installs.** New tables need applying (`drizzle-kit push` or generate/migrate), and `init-db.js` should be re-run to create the permission. Administrators already pass every permission check, so the admin page works before that.
+
+**Not done, needs a decision:** merging to `master` and releasing. Pushing to `master` runs kempo's publish workflow, which publishes a patch on any push not marked `[skip ci]`. A feature this size should be a `minor` run manually, as with kempo-server 3.4.0.
+
+**Deliberately not included:** upgrading kempo's own `kempo-testing-framework` (still 1.4.7). Its suite has no masked failures under 1.5.0, but the bump churns the lockfile (puppeteer 24 to 25) and belongs in its own change.
