@@ -2,7 +2,7 @@
 title: fix-rescan-listener-leak
 description: onRescan registers a listener on a module-level singleton emitter and never removes it, so every router built in one process leaks a listener and one rescan() fans out to all of them
 repos: kempo-server
-status: idea
+status: implemented on the 0001 branch, awaiting validation
 created: 2026-09-25
 owner: TBD
 qa: TBD
@@ -44,3 +44,12 @@ Likely shapes for a fix, to be settled at refinement:
 Watch for the same consideration that applied in task 0001: kempo-server can appear more than once in a resolved dependency tree (symlinked in local dev, or hoisted plus nested), so module-level state is per-copy. Any redesign should be explicit about whether rescan is meant to be process-wide across copies or scoped to one server.
 
 `rescan` is a published export (`kempo-server/rescan`) and is documented in UTILS.md and README, so a signature change is a breaking change for consumers and should be weighed against the low production impact.
+
+## Implemented (2026-09-25, on branch `0001_add-websockets-to-kempo-server`)
+Done as part of the 0001 branch rather than separately, because the bug was making the suite flaky: once more than ten routers existed in the process, `rescan()` in the full test run resolved with a dead router's 0 and failed a test, deterministically (14 routers registered, the first 11 answers were 0).
+- A router unregisters when its server closes. It learns its server from the first request or upgrade it sees. `router()`'s handler also exposes `dispose()` for embedders whose server never receives one.
+- `rescan()` now waits for every registered router and resolves with the **largest** count, instead of the first to answer. With one router (every normal deployment) nothing changes. It rejects only if every router failed, and resolves 0 when none are registered.
+- This also removes the `MaxListenersExceededWarning`.
+- The three fix shapes listed above were not used as written: no signature change to the exported `rescan()`, so it is not a breaking change. `onRescan` (internal) now returns a disposer.
+- Regression tests cover unregister-on-close, `dispose()`, largest-count-wins, error handling and the empty case; mutation-checked.
+- Still open: with several *live* servers in one process, `rescan()` rescans all of them and returns only the largest count. That is documented in UTILS.md; a per-server rescan would need an API change.
