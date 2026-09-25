@@ -2,11 +2,12 @@
 title: add-realtime-layer-to-kempo-core
 description: Build the realtime layer in kempo (CMS core) on kempo-server's WebSocket transport - authenticated sockets, channels, a Postgres LISTEN/NOTIFY bus across processes, persisted messages with replay, a browser client, and an admin connection view - so kempo (CMS) extensions can push to clients
 repos: kempo
-status: ready
+status: in progress
 created: 2026-09-25
 owner: Dustin
 qa: Dustin
-branches: {}
+branches:
+  kempo: 0003_add-realtime-layer-to-kempo-core
 prs: {}
 ---
 
