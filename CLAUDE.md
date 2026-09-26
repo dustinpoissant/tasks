@@ -54,21 +54,18 @@ Four skills manage the task lifecycle:
   - On N: Keep in "0 idea" and ask what else needs work
 
 ### `/task-do`
-**Start task from "1 ready" → "2 in progress"**
+**Do a task: "1 ready" → "2 in progress", and then actually build it**
 
-- List all tasks in "1 ready" directory
-- Let user select by task ID
-- Read task and extract repos list
-- For EACH repo:
-  - Check if you have access to the repo
-  - Ask user: "Create branch `NNNN_taskname` in {repo}? (Y/N)"
-  - If Y: Create and checkout the branch locally
-  - Ask: "Create a PR for this? (Y/N)"
-  - If Y: Create draft PR with task description, get PR URL
-  - Record branch name and PR URL in task metadata
-- Update task file with branches and prs sections
-- Move task to "2 in progress" directory
-- Show summary: task ID, repos, branches created, PRs created
+- Take the task ID (or list "1 ready" and "2 in progress"); a task already in progress is resumed
+- Read the task and each repo's AGENTS.md/CLAUDE.md, then for EACH repo, without asking:
+  - Get it onto its default branch, up to date, and create/checkout `NNNN_taskname`
+  - A repo the task calls new is created locally only; remote repos are never created unasked
+  - Open a draft PR (repos with a remote, after the first push) and record the URL
+- Update the task's `branches` and `prs`, move it to "2 in progress", commit and push the tasks repo
+- **Implement every acceptance criterion**: tests (mutation-checked), full suite, real-browser or real-server verification, docs, commits and pushed branches
+- Tick criteria only when built and verified; keep implementation notes in the task file
+- Stop before merging to `main`/`master`, releasing/publishing, creating remote repos or deleting anything
+- Report per criterion (done and verified, unverified, or left undone and why), branches, PRs, and the next step (`/task-validate`)
 
 ### `/task-validate`
 **Complete task from "2 in progress" → "3 completed"**
@@ -137,16 +134,11 @@ Always ask for approval before state transitions:
 Task refined. Ready to move to "1 ready"? (Y/N)
 ```
 
-Never force a state transition without asking.
+Never force a state transition without asking. (`/task-do` is the exception for starting: choosing to run it is the go-ahead to begin and to do the work.)
 
 ### When Creating Branches
 
-For each repo, ask individually:
-```
-Create branch 0001_add-auth in api-server? (Y/N)
-```
-
-This allows user to skip repos not ready or not relevant.
+`/task-do` creates the branch in each repo without asking; the task's repo list is the decision. It does not merge, release or create remote repositories without an explicit go-ahead.
 
 ### When Reporting Status
 

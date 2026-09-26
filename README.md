@@ -88,16 +88,17 @@ Refines a task from "0 idea" → "1 ready".
 ```
 
 ### `/task-do`
-Starts a task, moving from "1 ready" → "2 in progress".
+Does a task: moves it from "1 ready" → "2 in progress" and then builds it.
 
 ```bash
-/task-do
+/task-do 0004
 # Claude:
-# - Lists tasks in "1 ready"
-# - Creates branches (NNNN_taskname) in each repo
-# - Creates PRs if desired
-# - Updates task metadata with branch/PR info
-# - Moves to "2 in progress"
+# - Creates branches (NNNN_taskname) in each repo, without asking
+# - Opens draft PRs for repos that have a remote
+# - Updates task metadata with branch/PR info and moves to "2 in progress"
+# - Implements every acceptance criterion: code, tests, real verification, docs
+# - Commits and pushes the branches, ticks criteria as they are verified
+# - Stops before merging or releasing, then reports what is done and what is left
 ```
 
 ### `/task-validate`
@@ -122,8 +123,8 @@ Completes a task, moving from "2 in progress" → "3 completed".
 2. Ready to work → /task-refine
    Flesh out requirements, move to "1 ready"
 
-3. Start implementation → /task-do
-   Create branches, move to "2 in progress"
+3. Do the work → /task-do
+   Create branches, move to "2 in progress", then build it
 
 4. Finished and merged → /task-validate
    Check PRs, move to "3 completed"
