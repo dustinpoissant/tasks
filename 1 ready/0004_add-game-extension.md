@@ -39,7 +39,7 @@ The proof is a separate, deliberately tiny **kempo-tic-tac-toe** extension that 
 - **A game type is declared, not registered in code.** The game extension's `kempo-config.json` names its type and its module (`"game": { "types": [{ "name": "tic-tac-toe", "module": "./game.js", "minPlayers": 2, "maxPlayers": 2, "tickRate": 0 }] }`), and kempo-game reads that from the extension table, the way core reads declared channels. This has no load-order problem, since an imperative registration in an extension's module could run after the first player connects.
 - **Two synced trees, patched.** `state` and `live` are each synced as a JSON Merge Patch (RFC 7386) batched per tick, with a version number, plus a full snapshot when a player joins or asks to resync. A client that sees a version gap asks for a snapshot. A game type that would rather send its own events can, since the module can also emit messages directly.
 - **Ticks are optional.** `tickRate: 0` (tic-tac-toe) means the game reacts to inputs only and patches go out immediately. A positive rate runs a fixed-rate loop, calls the module's `onTick`, and flushes one batched patch per tick. The loop runs only while a game has live players.
-- **Each live game has its own process-scoped realtime channel**, registered in code when the game goes live and removed when it ends, with `authorize` checking the caller is a joined player and `onMessage` bound to that game. Core's process scope is what makes 20 updates a second per player affordable (no Postgres), and the channel lives only on the process hosting the game, so a subscribe to it anywhere else is refused, which is correct. This needs one small change in core: `unregisterChannel` is not in the SDK yet (see below).
+- **Each live game has its own realtime channel** (one channel per game, with `scope: "process"`, meaning it delivers in memory on the server hosting the game and never through Postgres; nothing is spawned), registered in code when the game goes live and removed when it ends, with `authorize` checking the caller is a joined player and `onMessage` bound to that game. Core's process scope is what makes 20 updates a second per player affordable (no Postgres), and the channel lives only on the process hosting the game, so a subscribe to it anywhere else is refused, which is correct. This needs one small change in core: `unregisterChannel` is not in the SDK yet (see below).
 - **Roles are per game.** One `owner` (the creator), the rest `player`. The owner invites, removes players, changes settings, and can delete the game. The owner cannot leave without first transferring ownership or deleting the game. Everyone joined can send inputs; the game type's module can restrict what a given role or player may do.
 - **Saving is compare-and-swap on a version.** Each save writes `state` only if `stateVersion` is what this process last read, then increments it. A save that finds a different version means another process has been hosting the same game; this session stops, tells its players, and they rejoin. It is a safety net, not multi-process support.
 - **One process hosts a game at a time.** Because process-scoped channels do not cross processes, everyone in a game must reach the same process. With several processes that means sticky routing by game id at the load balancer. v1 documents this and does not solve it.
@@ -104,13 +104,31 @@ Channels behind a permission or an `authorize` function; `scope: "process"` in-m
 
 **Proof**
 - [ ] **kempo-tic-tac-toe** is a separate extension, installed through kempo's real extension install path from packages installed into a clean project. Two browsers sign in as two users, one invites the other, they play a full game to a win and to a draw, an illegal move is refused, closing and reopening a browser resumes the game, and a server restart restores the board. Verified in a real browser.
-- [ ] **A capacity test** with a test-only game type (in kempo-game's tests, not shipped): 20 players in one game, each sending 20 inputs a second that change `live`, records tick and delivery latency and the number of database writes (which stays at the autosave rate). The figures go in the docs with the same caveats as core's.
+- [ ] **A built-in test game, "click race"** (in kempo-game's tests, never shipped; see Test fixture below) exercises the whole layer with two real WebSocket clients: it proves live sync, that `live` is never saved, the timed save, the win, and that a stranger is refused.
+- [ ] **A capacity test** reusing the same click-race type with 20 players and an unreachable target: each player sends 20 clicks a second, and it records tick and delivery latency and the number of database writes (which stays at the autosave rate). It also runs several games at once, so the figure covers a single VPS hosting many games and not only one. The figures go in the docs with the same caveats as core's.
 - [ ] **Mutation-checked** tests: each of the properties above (membership enforced, patches converge, live not saved, autosave only when dirty, CAS refusal) fails when the code that provides it is removed.
 
 **Quality and delivery**
 - [ ] DB-backed suites actually run (no `(SKIPPED)`) on kempo-game's own test database.
 - [ ] Docs and README in both new repos; kempo's `docs/realtime.md` gains the dynamic-channel note.
 - [ ] Released through each repo's normal process: kempo-game, kempo-tic-tac-toe, and the kempo minor for `unregisterChannel`, in that dependency order.
+
+## Test fixture: click race
+A deliberately tiny game type that lives in kempo-game's tests, installed through the same declared-type path a real game extension uses, so the tests exercise the real thing and not a shortcut. It is not shipped in the package.
+
+- **Rules:** two players each click as fast as they can; the first to reach 100 wins. Each player sees their own score and their opponent's.
+- **Data split:** the scores are `live` (they change many times a second and are never written to the database). The result (`status: "finished"`, `winner`) is `state`, which is saved.
+- **Type settings:** `minPlayers` 2, `maxPlayers` 2, a `target` of 100 (a setting on the game, so the capacity test can make it unreachable), `tickRate` 20 so patches are batched, and a short per-type autosave interval so the tests do not sit for 10 seconds (the default and the 10 to 30 second range are covered by a test that injects a clock).
+- **Input:** `{ type: "click" }`. The module increments the sender's score, and at the target sets the result and rejects every later click with a `409`.
+- **What the tests assert, with real clients:**
+  - Two clients sign in as two users, one creates a game and invites the other, who accepts; both join.
+  - Both click at machine speed. The winner is exactly the first to reach the target, no score ever exceeds it, and after the last patch both clients hold identical `state` and `live`.
+  - Each client's view of the opponent's score matches the server's.
+  - While the race runs, the game's row in the database is untouched (`stateVersion` and `savedAt` do not change); only after the win does the timed save write the result, once.
+  - A click after the win is refused; a click from a user who is not in the game is refused and changes nothing; a third user cannot join or subscribe.
+  - Killing a client mid-race is noticed, and it gets a fresh snapshot on return.
+  - Restarting the server mid-race loses only the scores (they were `live`); restarting after the win keeps the result.
+- **A real-browser run** of the same game uses an actual button, to confirm the frontend SDK works outside Node.
 
 ## Repos Involved
 - **kempo-game** (new): the layer.
