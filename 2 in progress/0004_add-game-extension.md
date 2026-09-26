@@ -2,11 +2,14 @@
 title: add-game-extension
 description: Create kempo-game, a generic kempo (CMS) extension that gives future games saved games with invited players, settings and state, a live multiplayer sync layer on kempo's realtime WebSockets, periodic and on-demand saves, a backend SDK, hooks and a frontend SDK, proven by a tiny tic-tac-toe game in its own extension
 repos: kempo-game (new), kempo-tic-tac-toe (new), kempo
-status: ready
+status: in progress
 created: 2026-09-26
 owner: Dustin
 qa: Dustin
-branches: {}
+branches:
+  kempo: 0004_add-game-extension
+  kempo-game: 0004_add-game-extension
+  kempo-tic-tac-toe: 0004_add-game-extension
 prs: {}
 ---
 
