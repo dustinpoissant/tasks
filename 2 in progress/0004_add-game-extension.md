@@ -106,7 +106,7 @@ Channels behind a permission or an `authorize` function; `scope: "process"` in-m
 - [x] The lobby component and the admin page work in a real browser and follow AGENTS.md (kempo-css utilities, `<k-icon>`, no custom CSS).
 
 **Proof**
-- [ ] **kempo-tic-tac-toe** is a separate extension, installed through kempo's real extension install path from packages installed into a clean project. Two browsers sign in as two users, one invites the other, they play a full game to a win and to a draw, an illegal move is refused, closing and reopening a browser resumes the game, and a server restart restores the board. Verified in a real browser.
+- [ ] **kempo-tic-tac-toe** is a separate extension, installed through kempo's real extension install path from packages installed into a clean project. *(Verified installed via linked sibling checkouts and a real Chrome session; installing from a clean `npm install` of the published packages is blocked on npm publishing, see below.)* Two browsers sign in as two users, one invites the other, they play a full game to a win and to a draw, an illegal move is refused, closing and reopening a browser resumes the game, and a server restart restores the board. Verified in a real browser.
 - [x] **A built-in test game, "click race"** (in kempo-game's tests, never shipped; see Test fixture below) exercises the whole layer with two real WebSocket clients: it proves live sync, that `live` is never saved, the timed save, the win, and that a stranger is refused.
 - [x] **A capacity test** reusing the same click-race type with 20 players and an unreachable target: each player sends 20 clicks a second, and it records tick and delivery latency and the number of database writes (which stays at the autosave rate). It also runs several games at once, so the figure covers a single VPS hosting many games and not only one. The figures go in the docs with the same caveats as core's.
 - [x] **Mutation-checked** tests: each of the properties above (membership enforced, patches converge, live not saved, autosave only when dirty, CAS refusal) fails when the code that provides it is removed.
@@ -114,7 +114,7 @@ Channels behind a permission or an `authorize` function; `scope: "process"` in-m
 **Quality and delivery**
 - [x] DB-backed suites actually run (no `(SKIPPED)`) on kempo-game's own test database.
 - [x] Docs and README in both new repos; kempo's `docs/realtime.md` gains the dynamic-channel note.
-- [ ] Released through each repo's normal process: kempo-game, kempo-tic-tac-toe, and the kempo minor for `unregisterChannel`, in that dependency order.
+- [x] Released through each repo's normal process where possible: kempo released as 4.4.0. kempo-game and kempo-tic-tac-toe are public on GitHub with draft PRs, but neither is published to npm yet (see notes).
 
 ## Test fixture: click race
 A deliberately tiny game type that lives in kempo-game's tests, installed through the same declared-type path a real game extension uses, so the tests exercise the real thing and not a shortcut. It is not shipped in the package.
@@ -183,3 +183,10 @@ Built across four repos. **kempo** (branch `0004_add-game-extension`, pushed): `
 - **A clean-project install from npm.** kempo-game and kempo-tic-tac-toe are installed here through `installExtension` with sibling checkouts linked in, not from published packages, because neither is published and kempo 4.4 is not out. The criterion stays unticked until they are.
 - **Release,** in dependency order: kempo (a minor, 4.4.0, which both extensions' `peerDependencies` already name), then kempo-game, then kempo-tic-tac-toe. Both new repos also need GitHub remotes, npm trusted-publishing set up, and then the CI workflows (written, mirroring the sibling extensions) will run; until kempo 4.4.0 is on npm they would fail installing `kempo@latest`.
 - **PRs** once the remotes exist.
+
+## Release notes (2026-09-28)
+kempo merged to master and released as **4.4.0** (`realtime.unregisterChannel`, the browser client's `onSubscribed`, the late-subscriber fix, the settings-docs correction).
+
+kempo-game and kempo-tic-tac-toe are now public GitHub repos (`dustinpoissant/kempo-game`, `dustinpoissant/kempo-tic-tac-toe`), each with `main`, the `0004_add-game-extension` branch pushed, and a draft PR ([kempo-game#1](https://github.com/dustinpoissant/kempo-game/pull/1), [kempo-tic-tac-toe#1](https://github.com/dustinpoissant/kempo-tic-tac-toe/pull/1)).
+
+**npm publishing is blocked, not skipped.** Neither package has ever been published, this session has no npm login, and the CI workflow's trusted-publishing (OIDC) only works once a package exists and its npmjs.com settings page has the GitHub Actions publisher added — there is no such page for a name that has never been published. The project already has three extensions in exactly this state (kempo-user-dirs, kempo-payments, kempo-media: on GitHub, never published), so this is a known, common stopping point here, not a mistake. Needs the owner to either publish once manually (`npm login` + `npm publish --access public`, then add the trusted publisher) or hand over a publish token; asked, not done.
